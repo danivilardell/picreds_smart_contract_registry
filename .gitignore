@@ -1,0 +1,11 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+contracts/lib/
+auditor/dev_rsa_key.pem
+auditor/dev_signer_key.hex
+credentials/

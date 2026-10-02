@@ -1,0 +1,415 @@
+<title>πCred Audit Registry</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a registry ledger. Header strip, filter bar, then a two-pane split: audited contracts on the left, the
+   selected audit's verification checklist and report on the right. Stacks to one column on phones. */
+:root {
+  --bg: #f2f4f7; --surface: #ffffff; --surface-2: #e9edf2; --fg: #16202b; --muted: #5d6c7b; --line: #d6dde5;
+  --accent: #1d5bb8; --accent-fg: #ffffff;
+  --good: #167a43; --good-bg: #e2f4e9; --warn: #9a5b00; --warn-bg: #fbefd8; --bad: #b02a22; --bad-bg: #fbe3e1;
+  --info: #3b4f66; --info-bg: #e6ebf2;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f151c; --surface: #171f28; --surface-2: #1f2a35; --fg: #e4e9ef; --muted: #90a0b1; --line: #2a3542;
+  --accent: #6ea4ff; --accent-fg: #0b1320;
+  --good: #4fd58d; --good-bg: #16302a; --warn: #f1b45f; --warn-bg: #3a2b14; --bad: #ff7b72; --bad-bg: #3d1f1d;
+  --info: #b5c3d3; --info-bg: #25303d; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0f151c; --surface: #171f28; --surface-2: #1f2a35; --fg: #e4e9ef; --muted: #90a0b1; --line: #2a3542;
+  --accent: #6ea4ff; --accent-fg: #0b1320;
+  --good: #4fd58d; --good-bg: #16302a; --warn: #f1b45f; --warn-bg: #3a2b14; --bad: #ff7b72; --bad-bg: #3d1f1d;
+  --info: #b5c3d3; --info-bg: #25303d; color-scheme: dark }
+
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--fg); font: 15px/1.45 var(--font-body); margin: 0 }
+.wrap { max-width: 1280px; margin: 0 auto; padding-block: 16px 40px; padding-inline: 16px }
+h1, h2, h3 { margin: 0; text-wrap: balance; line-height: 1.2 }
+h1 { font-size: 22px; font-weight: 700 } h2 { font-size: 17px; font-weight: 700 } h3 { font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted) }
+a { color: var(--accent) }
+button { font: inherit; cursor: pointer }
+code, .mono { font-family: var(--font-mono); font-size: 12.5px }
+.muted { color: var(--muted) }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px; border-radius: 999px; font-size: 12.5px; font-weight: 600; background: var(--info-bg); color: var(--info); white-space: nowrap }
+.pill.good { background: var(--good-bg); color: var(--good) } .pill.warn { background: var(--warn-bg); color: var(--warn) } .pill.bad { background: var(--bad-bg); color: var(--bad) }
+.pill.accent { background: var(--accent); color: var(--accent-fg) }
+
+header.top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding-bottom: 14px; border-bottom: 1px solid var(--line) }
+header.top .grow { flex: 1 1 240px; min-width: 0 }
+header.top .sub { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 4px; color: var(--muted); font-size: 13px }
+header.top .sub a.mono { color: var(--accent); text-decoration: none } header.top .sub a.mono:hover { text-decoration: underline }
+
+details.settings { margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface) }
+details.settings summary { cursor: pointer; padding: 8px 12px; font-weight: 600; color: var(--muted); list-style: none }
+details.settings summary::before { content: "▸ "; } details.settings[open] summary::before { content: "▾ "; }
+.settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; padding: 0 12px 12px }
+.settings-grid label { display: grid; gap: 4px; font-size: 12.5px; color: var(--muted); min-width: 0 }
+.settings-grid input, .settings-grid textarea { font: 13px var(--font-mono); padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); width: 100%; min-width: 0 }
+.settings-grid textarea { min-height: 54px; resize: vertical }
+.settings-actions { grid-column: 1 / -1; display: flex; gap: 8px; align-items: center; flex-wrap: wrap }
+.btn { border: 1px solid var(--line); background: var(--surface); color: var(--fg); border-radius: 7px; padding: 6px 12px; font-weight: 600 }
+.btn.primary { background: var(--accent); color: var(--accent-fg); border-color: transparent }
+.btn:focus-visible, input:focus-visible, textarea:focus-visible, .card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+
+.toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 14px }
+.toolbar input[type=search] { flex: 1 1 220px; min-width: 0; font: 14px var(--font-body); padding: 7px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--fg) }
+.grades { display: flex; gap: 6px }
+.gbtn { width: 34px; height: 30px; border-radius: 7px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); font-weight: 700 }
+.gbtn[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: var(--surface-2) }
+.status { font-size: 13px; color: var(--muted); min-height: 20px; margin-top: 10px }
+
+.split { display: grid; grid-template-columns: minmax(280px, 380px) minmax(0, 1fr); gap: 16px; margin-top: 14px; align-items: start }
+@media (max-width: 860px) { .split { grid-template-columns: 1fr } }
+.list { display: grid; gap: 8px; min-width: 0 }
+.card { display: grid; grid-template-columns: 52px 1fr; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); text-align: left; color: inherit; width: 100%; min-width: 0 }
+.card:hover { border-color: var(--accent) } .card[aria-current="true"] { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent) }
+.grade { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 10px; font: 700 26px/1 var(--font-body) }
+.grade small { font: 600 11px/1 var(--font-mono); margin-top: 3px; opacity: .85 }
+.g-A { background: var(--good-bg); color: var(--good) } .g-B { background: var(--good-bg); color: var(--good); filter: saturate(.6) }
+.g-C { background: var(--warn-bg); color: var(--warn) } .g-D { background: var(--bad-bg); color: var(--bad); filter: saturate(.7) } .g-F { background: var(--bad-bg); color: var(--bad) }
+.card .name { font-weight: 700; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; min-width: 0 }
+.card .addr { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.card .meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; font-size: 12px; color: var(--muted); align-items: center }
+.sev { display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 5px; font: 600 11px/18px var(--font-mono); text-align: center }
+.sev-critical, .sev-high { background: var(--bad-bg); color: var(--bad) } .sev-medium { background: var(--warn-bg); color: var(--warn) }
+.sev-low, .sev-informational { background: var(--info-bg); color: var(--info) }
+
+.detail { display: grid; gap: 14px; min-width: 0 }
+.panel { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 14px 16px; min-width: 0 }
+.panel > h3 { margin-bottom: 10px }
+.dhead { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap }
+.dhead .grade { width: 64px; height: 64px; font-size: 32px }
+.dhead .grow { flex: 1 1 260px; min-width: 0 }
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; font-size: 13.5px; min-width: 0 }
+.kv dt { color: var(--muted) } .kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere }
+.checks { display: grid; gap: 6px }
+.check { display: grid; grid-template-columns: 22px 1fr; gap: 10px; align-items: start; font-size: 14px }
+.check .ic { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font: 700 13px/1 var(--font-mono) }
+.ic.ok { background: var(--good-bg); color: var(--good) } .ic.fail { background: var(--bad-bg); color: var(--bad) } .ic.pend { background: var(--info-bg); color: var(--info) } .ic.warn { background: var(--warn-bg); color: var(--warn) }
+.check .why { color: var(--muted); font-size: 12.5px; overflow-wrap: anywhere }
+p.summary { margin: 0; font-size: 15px; line-height: 1.55 }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px }
+th, td { text-align: left; padding: 7px 8px; border-top: 1px solid var(--line); vertical-align: top }
+th { color: var(--muted); font-weight: 600; font-size: 12.5px; text-transform: uppercase; letter-spacing: .03em; border-top: 0 }
+td.n { font-variant-numeric: tabular-nums }
+.scroll { overflow-x: auto; min-width: 0 }
+.versions { display: flex; flex-wrap: wrap; gap: 6px }
+.vbtn { border: 1px solid var(--line); background: var(--surface-2); color: var(--fg); border-radius: 7px; padding: 4px 9px; font-size: 12.5px }
+.vbtn[aria-pressed="true"] { border-color: var(--accent); color: var(--accent) }
+.hash { font-family: var(--font-mono); font-size: 12px; overflow-wrap: anywhere }
+.hash a { color: var(--accent); text-decoration: none } .hash a:hover { text-decoration: underline }
+details.more summary { cursor: pointer; color: var(--accent); font-size: 13.5px }
+.empty { padding: 30px 16px; text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: 10px }
+@media (prefers-reduced-motion: no-preference) { .card, .btn, .vbtn { transition: border-color .12s } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="grow">
+      <h1>πCred Audit Registry</h1>
+      <div class="sub">
+        <span id="chainName">Sepolia</span>
+        <a class="mono" id="registryLink" href="https://sepolia.etherscan.io/address/0x7A165e86e707Ff7E69D687Af3350242BDEc5C4cC" target="_blank" rel="noopener">0x7A165e86e707Ff7E69D687Af3350242BDEc5C4cC</a>
+      </div>
+    </div>
+  </header>
+
+  <details class="settings" id="settings">
+    <summary>Connection</summary>
+    <div class="settings-grid">
+      <label>Registry RPC URL <input id="cfgRpc" placeholder="https://..."></label>
+      <label>Registry address <input id="cfgRegistry" placeholder="0x..."></label>
+      <label>First block to scan <input id="cfgFrom" inputmode="numeric" placeholder="11829777"></label>
+      <label>RPC per audited chain (JSON) <textarea id="cfgRpcs" placeholder='{"1": "https://ethereum-rpc.publicnode.com"}'></textarea></label>
+      <div class="settings-actions">
+        <button class="btn primary" id="reload" type="button">Reload from chain</button>
+        <button class="btn" id="resetCfg" type="button">Reset to defaults</button>
+        <span class="muted" style="font-size:12.5px">Reads only. Nothing here is sent anywhere but the RPC you name.</span>
+      </div>
+    </div>
+  </details>
+
+  <div class="toolbar">
+    <input type="search" id="search" placeholder="Search by address or contract name" aria-label="Search audits">
+    <div class="grades" role="group" aria-label="Filter by grade">
+      <button class="gbtn" data-g="A" aria-pressed="false" type="button">A</button><button class="gbtn" data-g="B" aria-pressed="false" type="button">B</button><button class="gbtn" data-g="C" aria-pressed="false" type="button">C</button><button class="gbtn" data-g="D" aria-pressed="false" type="button">D</button><button class="gbtn" data-g="F" aria-pressed="false" type="button">F</button>
+    </div>
+  </div>
+  <div class="status" id="status" aria-live="polite"></div>
+
+  <div class="split">
+    <div class="list" id="list"></div>
+    <div class="detail" id="detail"><div class="empty">Select an audited contract to see its verification checklist and report.</div></div>
+  </div>
+</div>
+
+<script id="snapshot" type="application/json"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.15.0/ethers.umd.min.js"></script>
+<script>
+(() => {
+const DEFAULTS = {
+  rpc: "https://ethereum-sepolia-rpc.publicnode.com",
+  registry: "0x7A165e86e707Ff7E69D687Af3350242BDEc5C4cC",
+  from: 11829777,
+  rpcs: { "1": "https://ethereum-rpc.publicnode.com", "11155111": "https://ethereum-sepolia-rpc.publicnode.com" },
+};
+const ABI = [
+  "event AuditSubmitted(bytes32 indexed key, address indexed signer, (uint256 chainId, address contractAddress, bytes32 codeHash, uint256 blockNumber, bytes32 dependenciesHash, bytes1 grade, uint8 score, bytes32 configHash, bytes32 reportHash, uint64 issuedAt) record, string report)",
+  "event SignerRegistered(address indexed signer, bytes32 indexed imageDigest, string jwt)",
+  "function signers(address) view returns (bytes32 imageDigest, bytes32 attestationHash, uint64 registeredAt)",
+  "function googleKeys(string) view returns (bytes)",
+  "function approvedImages(bytes32) view returns (bool)",
+  "function expectedAudience() view returns (string)",
+  "function owner() view returns (address)",
+];
+const CHAINS = { 1: ["Ethereum", "https://etherscan.io"], 11155111: ["Sepolia", "https://sepolia.etherscan.io"], 8453: ["Base", "https://basescan.org"],
+  42161: ["Arbitrum One", "https://arbiscan.io"], 10: ["OP Mainnet", "https://optimistic.etherscan.io"], 137: ["Polygon", "https://polygonscan.com"] };
+const SEV_ORDER = ["critical", "high", "medium", "low", "informational"];
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const short = (h, n = 6) => h ? h.slice(0, 2 + n) + "…" + h.slice(-4) : "—";
+const chainName = (id) => (CHAINS[id] || [`chain ${id}`])[0];
+const explorer = (id, path) => CHAINS[id] ? `${CHAINS[id][1]}/${path}` : null;
+const when = (ts) => new Date(Number(ts) * 1000).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+
+// Canonical JSON exactly as the auditor computes it: sorted keys, no whitespace, UTF-8.
+const canonical = (v) => Array.isArray(v) ? "[" + v.map(canonical).join(",") + "]"
+  : v && typeof v === "object" ? "{" + Object.keys(v).sort().map((k) => JSON.stringify(k) + ":" + canonical(v[k])).join(",") + "}"
+  : JSON.stringify(v);
+const keccakText = (s) => ethers.keccak256(ethers.toUtf8Bytes(s));
+const b64url = (bytes) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+const b64urlDecode = (s) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - s.length % 4) % 4)), (c) => c.charCodeAt(0));
+const jwtParts = (jwt) => { const [h, p] = jwt.split("."); const dec = (x) => JSON.parse(new TextDecoder().decode(b64urlDecode(x))); return { header: dec(h), payload: dec(p) }; };
+async function verifyJwt(jwt, modulusHex) {
+  const [h, p, s] = jwt.split(".");
+  const key = await crypto.subtle.importKey("jwk", { kty: "RSA", n: b64url(ethers.getBytes(modulusHex)), e: "AQAB", alg: "RS256", ext: true },
+    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["verify"]);
+  return crypto.subtle.verify("RSASSA-PKCS1-v1_5", key, b64urlDecode(s), new TextEncoder().encode(h + "." + p));
+}
+
+// ---------------------------------------------------------------- config
+let cfg = loadCfg();
+function loadCfg() { try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem("picreds-ui") || "{}") }; } catch { return { ...DEFAULTS }; } }
+function saveCfg() { try { localStorage.setItem("picreds-ui", JSON.stringify(cfg)); } catch {} }
+function showCfg() { $("cfgRpc").value = cfg.rpc; $("cfgRegistry").value = cfg.registry; $("cfgFrom").value = cfg.from; $("cfgRpcs").value = JSON.stringify(cfg.rpcs); }
+function readCfg() {
+  let rpcs = cfg.rpcs; try { rpcs = JSON.parse($("cfgRpcs").value || "{}"); } catch { setStatus("RPC map is not valid JSON; keeping the previous map."); }
+  cfg = { rpc: $("cfgRpc").value.trim(), registry: $("cfgRegistry").value.trim(), from: Number($("cfgFrom").value) || 0, rpcs }; saveCfg();
+}
+
+// ---------------------------------------------------------------- data: { registry, audits[], signers{}, codeHashes{}, mode }
+let data = null, selectedKey = null, selectedIdx = 0, gradeFilter = new Set();
+
+async function loadLive() {
+  setStatus("Connecting…");
+  const provider = new ethers.JsonRpcProvider(cfg.rpc);
+  const reg = new ethers.Contract(cfg.registry, ABI, provider);
+  const net = await provider.getNetwork();
+  const latest = await provider.getBlockNumber();
+  const [aud, own] = await Promise.all([reg.expectedAudience(), reg.owner()]);
+  setStatus(`Scanning blocks ${cfg.from.toLocaleString()} to ${latest.toLocaleString()} for audits…`);
+  const [auditLogs, signerLogs] = await Promise.all([chunkedLogs(reg, reg.filters.AuditSubmitted(), cfg.from, latest), chunkedLogs(reg, reg.filters.SignerRegistered(), cfg.from, latest)]);
+  const signers = {};
+  for (const l of signerLogs) {
+    const addr = l.args.signer, jwt = l.args.jwt;
+    const [info, kid] = [await reg.signers(addr), jwtParts(jwt).header.kid];
+    const [approved, modulus] = await Promise.all([reg.approvedImages(info.imageDigest), reg.googleKeys(kid)]);
+    signers[addr.toLowerCase()] = { address: addr, jwt, kid, imageDigest: info.imageDigest, attestationHash: info.attestationHash, registeredAt: Number(info.registeredAt), approved, modulus, txHash: l.transactionHash };
+  }
+  const audits = auditLogs.map((l) => ({ key: l.args.key, signer: l.args.signer, record: plainRecord(l.args.record), report: JSON.parse(l.args.report), blockNumber: l.blockNumber, txHash: l.transactionHash }));
+  setStatus("Reading current code hashes…");
+  const codeHashes = {};
+  for (const a of audits) {
+    const k = `${a.record.chainId}:${a.record.contractAddress.toLowerCase()}`;
+    if (k in codeHashes) continue;
+    const url = cfg.rpcs[String(a.record.chainId)] || (Number(net.chainId) === a.record.chainId ? cfg.rpc : null);
+    try { codeHashes[k] = url ? ethers.keccak256(await new ethers.JsonRpcProvider(url).getCode(a.record.contractAddress)) : null; } catch { codeHashes[k] = null; }
+  }
+  return { mode: "live", takenAt: Date.now(), block: latest, registry: { address: cfg.registry, chainId: Number(net.chainId), owner: own, expectedAudience: aud }, audits, signers, codeHashes };
+}
+async function chunkedLogs(contract, filter, from, to, step = 20000) {
+  const out = [];
+  for (let a = from; a <= to; a += step) out.push(...await contract.queryFilter(filter, a, Math.min(a + step - 1, to)));
+  return out;
+}
+const plainRecord = (r) => ({ chainId: Number(r.chainId), contractAddress: r.contractAddress, codeHash: r.codeHash, blockNumber: Number(r.blockNumber), dependenciesHash: r.dependenciesHash,
+  grade: String.fromCharCode(parseInt(r.grade.slice(2, 4), 16)), score: Number(r.score), configHash: r.configHash, reportHash: r.reportHash, issuedAt: Number(r.issuedAt) });
+
+async function load() {
+  const snap = $("snapshot").textContent.trim();
+  try {
+    if (snap) { data = { ...JSON.parse(snap), mode: "snapshot" }; }
+    else data = await loadLive();
+  } catch (e) {
+    if (snap) throw e;
+    data = null; render();
+    setStatus(`Could not read the registry: ${e.shortMessage || e.message}. Check the connection settings above.`);
+    return;
+  }
+  setStatus("");
+  render();
+}
+
+// ---------------------------------------------------------------- rendering
+// Only audits signed by a key attested with a real Google-signed token are shown; MOCK_TEE development records are hidden.
+const isRealTee = (a) => { const s = data.signers[a.signer.toLowerCase()]; return !!s && !s.kid.startsWith("mock"); };
+function groups() {
+  const m = new Map();
+  for (const a of data.audits.filter(isRealTee)) { const k = `${a.record.chainId}:${a.record.contractAddress.toLowerCase()}`; if (!m.has(k)) m.set(k, []); m.get(k).push(a); }
+  for (const list of m.values()) list.sort((x, y) => y.record.issuedAt - x.record.issuedAt);
+  return [...m.entries()].sort((x, y) => y[1][0].record.issuedAt - x[1][0].record.issuedAt);
+}
+const subjectName = (a) => a.report.subject?.name || a.report.audit?.summary?.match(/^([A-Z][A-Za-z0-9_]{2,40})\b/)?.[1] || null;
+
+function render() {
+  const list = $("list"), q = $("search").value.trim().toLowerCase();
+  list.innerHTML = "";
+  if (!data) { list.innerHTML = `<div class="empty">No data loaded.</div>`; return; }
+  const gs = groups().filter(([, v]) => {
+    const a = v[0], name = (subjectName(a) || "").toLowerCase();
+    return (!q || a.record.contractAddress.toLowerCase().includes(q) || name.includes(q)) && (!gradeFilter.size || gradeFilter.has(a.record.grade));
+  });
+  if (!gs.length) list.innerHTML = `<div class="empty">${data.audits.filter(isRealTee).length ? "No audits match the filter." : "No TEE-attested audits have been submitted to this registry yet."}</div>`;
+  for (const [k, versions] of gs) {
+    const a = versions[0], r = a.record;
+    const el = document.createElement("button"); el.type = "button"; el.className = "card"; el.setAttribute("aria-current", String(k === selectedKey));
+    el.innerHTML = `
+      <div class="grade g-${r.grade}">${r.grade}<small>${r.score}</small></div>
+      <div style="min-width:0">
+        <div class="name">${esc(subjectName(a) || "Unnamed contract")} <span class="muted" style="font-weight:400;font-size:12.5px">${esc(chainName(r.chainId))}</span></div>
+        <div class="addr mono">${esc(r.contractAddress)}</div>
+      </div>`;
+    el.onclick = () => { selectedKey = k; selectedIdx = 0; history.replaceState(null, "", "#" + k.replace(":", "-")); render(); };
+    list.appendChild(el);
+  }
+  renderDetail();
+}
+
+async function renderDetail() {
+  const d = $("detail");
+  const versions = selectedKey && data ? groups().find(([k]) => k === selectedKey)?.[1] : null;
+  if (!versions) { d.innerHTML = `<div class="empty">Select an audited contract to see its verification checklist and report.</div>`; return; }
+  const a = versions[Math.min(selectedIdx, versions.length - 1)], r = a.record, cs = a.report, audit = cs.audit, signer = data.signers[a.signer.toLowerCase()];
+  const subjLink = explorer(r.chainId, `address/${r.contractAddress}`), txLink = explorer(data.registry.chainId, `tx/${a.txHash}`);
+  const findings = [...audit.findings].sort((x, y) => SEV_ORDER.indexOf(x.severity) - SEV_ORDER.indexOf(y.severity));
+  const deps = cs.dependencies || [];
+  d.innerHTML = `
+    <div class="panel">
+      <div class="dhead">
+        <div class="grade g-${r.grade}">${r.grade}<small>${r.score} / 100</small></div>
+        <div class="grow">
+          <h2>${esc(subjectName(a) || "Unnamed contract")}</h2>
+          <div class="hash">${subjLink ? `<a href="${subjLink}" target="_blank" rel="noopener">${esc(r.contractAddress)}</a>` : esc(r.contractAddress)}</div>
+          <div class="meta" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">
+            <span class="pill">${esc(chainName(r.chainId))}</span>
+            <span class="pill">block ${r.blockNumber.toLocaleString()}</span>
+            <span class="pill ${audit.confidence.level === "high" ? "good" : audit.confidence.level === "medium" ? "warn" : "bad"}">confidence ${esc(audit.confidence.level)}</span>
+            ${audit.upgradeability?.upgradeable ? `<span class="pill ${audit.upgradeability.timelock ? "" : "warn"}">upgradeable${audit.upgradeability.timelock ? ", timelocked" : ", no timelock"}</span>` : `<span class="pill good">not upgradeable</span>`}
+            ${cs.subject?.sourceVerified === false ? `<span class="pill bad">source unverified</span>` : ""}
+            <span class="pill good">TEE attested</span>
+          </div>
+        </div>
+      </div>
+      ${versions.length > 1 ? `<div style="margin-top:12px"><h3>Records for this address</h3><div class="versions">${versions.map((v, i) => `<button type="button" class="vbtn" data-i="${i}" aria-pressed="${i === selectedIdx}">${when(v.record.issuedAt)} · ${v.record.grade} ${v.record.score} · code ${short(v.record.codeHash, 4)} · signer ${short(v.signer, 4)}</button>`).join("")}</div></div>` : ""}
+    </div>
+
+    <div class="panel"><h3>Summary</h3><p class="summary">${esc(audit.summary)}</p>
+      <dl class="kv" style="margin-top:10px"><dt>Confidence</dt><dd>${esc(audit.confidence.level)}: ${esc(audit.confidence.reason)}</dd>
+      <dt>Upgradeability</dt><dd>${esc(audit.upgradeability?.notes || "—")}</dd>
+      <dt>SCAE check</dt><dd>grade ${esc(cs.scaeCheck?.gradeIntact)} with source intact, ${esc(cs.scaeCheck?.gradeStripped)} with comments and strings stripped${cs.scaeCheck?.disagreement ? " <b>(disagreement, worse grade reported)</b>" : " (agree)"}</dd></dl>
+    </div>
+
+    <div class="panel"><h3>Verification</h3><div class="checks" id="checks"></div></div>
+
+    <div class="panel"><h3>Findings (${findings.length})</h3>
+      ${findings.length ? `<div class="scroll"><table><thead><tr><th>Severity</th><th>Finding</th><th>Location</th></tr></thead><tbody>
+      ${findings.map((f) => `<tr><td><span class="sev sev-${esc(f.severity)}">${esc(f.severity)}</span></td><td><b>${esc(f.title)}</b><div class="muted" style="margin-top:3px">${esc(f.description)}</div><div style="margin-top:4px"><span class="muted">Fix:</span> ${esc(f.recommendation)}</div></td><td class="mono" style="white-space:normal;overflow-wrap:anywhere">${esc(f.location)}</td></tr>`).join("")}
+      </tbody></table></div>` : `<p class="muted" style="margin:0">No findings.</p>`}
+    </div>
+
+    <div class="panel"><h3>Scope</h3>
+      <div class="scroll"><table><thead><tr><th>Contract</th><th>Role</th><th>Source</th><th>Code hash</th></tr></thead><tbody>
+        <tr><td class="mono">${esc(r.contractAddress)}</td><td>primary${cs.subject?.name ? ` · ${esc(cs.subject.name)}` : ""}</td><td>${esc(cs.subject?.matchType || (cs.scope?.sourceVerified?.[r.contractAddress] ? "verified" : "—"))}</td><td class="hash">${esc(r.codeHash)}</td></tr>
+        ${deps.map((x) => `<tr><td class="mono">${esc(x.address)}</td><td>${esc(x.role)}${x.name ? ` · ${esc(x.name)}` : ""}</td><td>${esc(x.matchType)}</td><td class="hash">${esc(x.codeHash)}</td></tr>`).join("")}
+      </tbody></table></div>
+      ${cs.notFetched?.length ? `<p class="muted" style="margin:10px 0 0;font-size:13px">Not fetched: ${cs.notFetched.map((n) => `<span class="mono">${esc(short(n.address, 8))}</span> (${esc(n.reason)})`).join(", ")}</p>` : ""}
+    </div>
+
+    <div class="panel"><h3>Pipeline and provenance</h3>
+      <dl class="kv">
+        <dt>Model</dt><dd class="mono">${esc(cs.pipeline?.model)} · auditor ${esc(cs.pipeline?.auditorVersion)}</dd>
+        <dt>configHash</dt><dd class="hash">${esc(r.configHash)}</dd>
+        <dt>reportHash</dt><dd class="hash">${esc(r.reportHash)}</dd>
+        <dt>Signer</dt><dd class="hash">${esc(a.signer)}${signer ? ` · image sha256:${esc(signer.imageDigest.slice(2))}` : ""}</dd>
+        <dt>Submitted</dt><dd>${txLink ? `<a href="${txLink}" target="_blank" rel="noopener">tx ${esc(short(a.txHash, 8))}</a>` : esc(short(a.txHash, 8))} in block ${a.blockNumber.toLocaleString()}</dd>
+        <dt>RPC</dt><dd class="hash">${esc(cs.provenance?.rpc?.url)} · block hash ${esc(short(cs.provenance?.rpc?.blockHash, 8))}</dd>
+      </dl>
+      <details class="more" style="margin-top:10px"><summary>${(cs.pipeline?.requests || []).length} model calls, ${(cs.provenance?.toolCalls || []).length} tool calls, ${Object.keys(cs.provenance?.sources || {}).length} source fetches</summary>
+        <div class="scroll" style="margin-top:8px"><table><thead><tr><th>Pass</th><th>Turn</th><th>Stop</th><th>Tokens in / out</th><th>Request sha256</th><th>Response sha256</th></tr></thead><tbody>
+        ${(cs.pipeline?.requests || []).map((t) => `<tr><td>${esc(t.pass)}</td><td class="n">${t.turn}</td><td>${esc(t.stopReason)}</td><td class="n">${t.usage?.input?.toLocaleString()} / ${t.usage?.output?.toLocaleString()}</td><td class="hash">${esc(short(t.requestSha256, 10))}</td><td class="hash">${esc(short(t.responseSha256, 10))}</td></tr>`).join("")}
+        </tbody></table></div>
+        <div class="scroll" style="margin-top:8px"><table><thead><tr><th>Tool</th><th>Arguments</th></tr></thead><tbody>
+        ${(cs.provenance?.toolCalls || []).map((t) => `<tr><td class="mono">${esc(t.name)}</td><td class="hash">${esc(JSON.stringify(t.args))}</td></tr>`).join("")}
+        </tbody></table></div>
+        <div class="scroll" style="margin-top:8px"><table><thead><tr><th>Source</th><th>Provider</th><th>Match</th><th>Body sha256</th></tr></thead><tbody>
+        ${Object.entries(cs.provenance?.sources || {}).map(([addr, s]) => `<tr><td class="mono">${esc(short(addr, 8))}</td><td>${esc(s.provider)}</td><td>${esc(s.matchType)}</td><td class="hash">${esc(short(s.bodySha256, 10))}</td></tr>`).join("")}
+        </tbody></table></div>
+      </details>
+    </div>`;
+  d.querySelectorAll(".vbtn").forEach((b) => b.onclick = () => { selectedIdx = Number(b.dataset.i); renderDetail(); });
+  await renderChecks(a, signer);
+}
+
+async function renderChecks(a, signer) {
+  const r = a.record, cs = a.report, el = $("checks"), out = [];
+  const add = (state, text, why) => out.push({ state, text, why });
+  const k = `${r.chainId}:${r.contractAddress.toLowerCase()}`, now = data.codeHashes[k];
+  if (now === null || now === undefined) add("warn", "Current code not checked", "No RPC configured for this chain.");
+  else if (now === r.codeHash) add("ok", "Code unchanged since the audit", `EXTCODEHASH at ${data.mode === "live" ? "the latest block" : "the snapshot block"} equals the audited codeHash.`);
+  else add("fail", "Code changed since the audit", `Current EXTCODEHASH ${short(now, 8)} differs from audited ${short(r.codeHash, 8)}. The contract was upgraded or replaced.`);
+
+  const rh = keccakText(canonical(cs));
+  if (rh === r.reportHash) add("ok", "Report matches reportHash", "keccak256 of the canonical report JSON from the event equals the on-chain record.");
+  else add("fail", "Report does not match reportHash", `Recomputed ${short(rh, 8)}; on chain ${short(r.reportHash, 8)}.`);
+
+  try {
+    const deps = (cs.dependencies || []).map((x) => [x.chainId, x.address, x.codeHash, x.blockNumber]);
+    const dh = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(["tuple(uint256,address,bytes32,uint256)[]"], [deps]));
+    add(dh === r.dependenciesHash ? "ok" : "fail", dh === r.dependenciesHash ? `Dependencies match dependenciesHash (${deps.length})` : "Dependencies do not match dependenciesHash", `keccak256(abi.encode(Subject[])) over the report's dependency tuples.`);
+  } catch (e) { add("warn", "Dependencies hash not checked", e.message); }
+
+  if (!signer) add("fail", "Signer is not attested", `${a.signer} has no registration in this registry.`);
+  else {
+    add("ok", "Signer attested", `Registered ${when(signer.registeredAt)} for image sha256:${signer.imageDigest.slice(2)}.`);
+    add(signer.approved ? "ok" : "fail", signer.approved ? "Image digest is approved" : "Image digest is no longer approved", `approvedImages(${short(signer.imageDigest, 8)})`);
+    let claims = null; try { claims = jwtParts(signer.jwt); } catch {}
+    if (!claims) add("fail", "Attestation token unreadable", "");
+    else {
+      const p = claims.payload, nonce = Array.isArray(p.eat_nonce) ? p.eat_nonce[0] : p.eat_nonce;
+      if (signer.modulus && signer.modulus !== "0x") {
+        let valid = false; try { valid = await verifyJwt(signer.jwt, signer.modulus); } catch {}
+        add(valid ? "ok" : "fail", valid ? "Attestation signature verifies (RS256)" : "Attestation signature INVALID", `kid ${claims.header.kid}${signer.kid.startsWith("mock") ? " (mock dev key, not Google)" : " (Google Confidential Space key)"}, checked in this browser with WebCrypto against the on-chain modulus.`);
+      } else add("warn", "Attestation key rotated out", `kid ${claims.header.kid} is no longer in googleKeys; the registration was verified on chain while the key was live.`);
+      add(p.aud === data.registry.expectedAudience ? "ok" : "fail", "Audience bound to this registry", `aud = ${p.aud}`);
+      add(nonce?.toLowerCase() === a.signer.toLowerCase() ? "ok" : "fail", "Nonce is the signer address", `eat_nonce = ${nonce}`);
+      add(p.dbgstat === "disabled-since-boot" ? "ok" : "fail", "Production image (debug disabled)", `dbgstat = ${p.dbgstat}, hwmodel = ${p.hwmodel}, swname = ${p.swname}, exp ${when(p.exp)}`);
+    }
+  }
+  el.innerHTML = out.map((c) => `<div class="check"><span class="ic ${c.state}">${{ ok: "✓", fail: "✗", warn: "!", pend: "…" }[c.state]}</span><div><div>${esc(c.text)}</div>${c.why ? `<div class="why">${esc(c.why)}</div>` : ""}</div></div>`).join("");
+}
+
+function setStatus(t) { $("status").textContent = t; }
+
+// ---------------------------------------------------------------- wiring
+showCfg();
+$("registryLink").textContent = cfg.registry;
+$("registryLink").href = `https://sepolia.etherscan.io/address/${cfg.registry}`;
+$("reload").onclick = () => { readCfg(); $("registryLink").textContent = cfg.registry; $("snapshot").textContent = ""; load(); };
+$("resetCfg").onclick = () => { cfg = { ...DEFAULTS }; saveCfg(); showCfg(); };
+$("search").oninput = () => render();
+document.querySelectorAll(".gbtn").forEach((b) => b.onclick = () => { const g = b.dataset.g; gradeFilter.has(g) ? gradeFilter.delete(g) : gradeFilter.add(g); b.setAttribute("aria-pressed", String(gradeFilter.has(g))); render(); });
+const anchor = location.hash.slice(1); if (/^\d+-0x[0-9a-fA-F]{40}$/.test(anchor)) selectedKey = anchor.replace("-", ":").toLowerCase();
+load().then(() => { if (data) { $("chainName").textContent = chainName(data.registry.chainId); const ex = explorer(data.registry.chainId, `address/${cfg.registry}`); if (ex) $("registryLink").href = ex; if (!selectedKey && groups().length) { selectedKey = groups()[0][0]; render(); } } });
+})();
+</script>

@@ -1,0 +1,8 @@
+anthropic==1.11.0
+cryptography==50.0.2
+eth-account==0.14.0
+fastapi==0.142.2
+httpx==0.28.1
+python-dotenv==1.2.4
+uvicorn==0.54.0
+web3==8.0.0

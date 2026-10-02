@@ -1,0 +1,6 @@
+# Only auditor/ is copied into the image; keep secrets and dev material out even if the context changes.
+*
+!auditor/
+auditor/dev_rsa_key.pem
+auditor/tests/
+**/__pycache__/
